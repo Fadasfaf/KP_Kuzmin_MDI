@@ -14,16 +14,19 @@ namespace GraphicalEditorMDI
             this.WindowState = FormWindowState.Maximized;
         }
 
-        private void NewDocument()
+        public void PasteToNewDocument(Bitmap image)
         {
             DrawingDocument doc = new DrawingDocument(documentCounter++);
             doc.MdiParent = this;
+            doc.Size = new Size(1300, 544);
             doc.Show();
         }
 
         private void newToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            NewDocument();
+            DrawingDocument doc = new DrawingDocument(documentCounter++);
+            doc.Size = new Size(1300, 544);
+            doc.Show();
         }
 
         private void closeToolStripMenuItem_Click(object sender, EventArgs e)
@@ -36,7 +39,6 @@ namespace GraphicalEditorMDI
         {
             foreach (Form childForm in MdiChildren)
                 childForm.Close();
-
             documentCounter = 1;
         }
 
@@ -58,11 +60,6 @@ namespace GraphicalEditorMDI
         private void exitToolStripMenuItem_Click(object sender, EventArgs e)
         {
             Application.Exit();
-        }
-
-        private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            MessageBox.Show("Графический редактор MDI by Кузьмин С.Ю. ЗЦИС-26\nВерсия 1.0", "О программе");
         }
     }
 }

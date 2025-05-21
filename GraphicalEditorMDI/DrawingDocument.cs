@@ -1,3 +1,4 @@
+// DrawingDocument.cs
 using System;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -30,41 +31,37 @@ namespace GraphicalEditorMDI
             InitializeDrawingSurface();
             InitializeToolbar();
             InitializeContextMenu();
+
             pictureBox.Paint += PictureBox_Paint;
             pictureBox.MouseDown += pictureBox_MouseDown;
             pictureBox.MouseMove += pictureBox_MouseMove;
             pictureBox.MouseUp += pictureBox_MouseUp;
+            Resize += (s, e) => RedrawOnResize();
+        }
+
+        private void RedrawOnResize()
+        {
+            Bitmap old = drawingBitmap;
+            InitializeDrawingSurface();
+            if (old != null)
+            {
+                drawingGraphics.DrawImage(old, 0, 0);
+                old.Dispose();
+            }
+            pictureBox.Invalidate();
         }
 
         private void InitializeDrawingSurface()
         {
-            int canvasWidth = ClientSize.Width;
-            int canvasHeight = ClientSize.Height - toolPanel.Height;
-            if (canvasWidth <= 0 || canvasHeight <= 0) return;
+            int width = ClientSize.Width;
+            int height = ClientSize.Height - toolPanel.Height;
+            if (width <= 0 || height <= 0) return;
 
-            var oldBitmap = drawingBitmap;
-            drawingBitmap = new Bitmap(canvasWidth, canvasHeight);
+            drawingBitmap = new Bitmap(width, height);
             drawingGraphics = Graphics.FromImage(drawingBitmap);
             drawingGraphics.Clear(Color.White);
-
-            if (oldBitmap != null)
-            {
-                using (Graphics g = Graphics.FromImage(drawingBitmap))
-                {
-                    g.DrawImage(oldBitmap, 0, 0);
-                }
-                oldBitmap.Dispose();
-            }
-
-            pictureBox.Size = new Size(canvasWidth, canvasHeight);
+            pictureBox.Size = new Size(width, height);
             pictureBox.Image = drawingBitmap;
-        }
-
-        protected override void OnResize(EventArgs e)
-        {
-            base.OnResize(e);
-            InitializeDrawingSurface();
-            pictureBox.Invalidate();
         }
 
         private void InitializeToolbar()
@@ -105,7 +102,7 @@ namespace GraphicalEditorMDI
 
         private void pictureBox_MouseDown(object sender, MouseEventArgs e)
         {
-            if (e.Button == MouseButtons.Right) return;
+            if (e.Button != MouseButtons.Left) return;
             startPoint = endPoint = e.Location;
             isDrawing = true;
             if (currentMode == DrawingMode.Select)
@@ -117,19 +114,24 @@ namespace GraphicalEditorMDI
 
         private void pictureBox_MouseMove(object sender, MouseEventArgs e)
         {
-            if (!isDrawing || e.Button == MouseButtons.Right) return;
+            if (!isDrawing || e.Button != MouseButtons.Left) return;
             endPoint = e.Location;
             if (isSelecting)
             {
                 selectionRect = GetRectangle(startPoint, endPoint);
                 pictureBox.Invalidate();
             }
+            else
+            {
+                pictureBox.Invalidate();
+            }
         }
 
         private void pictureBox_MouseUp(object sender, MouseEventArgs e)
         {
-            if (e.Button == MouseButtons.Right || !isDrawing) return;
+            if (!isDrawing) return;
             isDrawing = false;
+
             if (isSelecting)
             {
                 selectionRect = GetRectangle(startPoint, endPoint);
@@ -152,7 +154,9 @@ namespace GraphicalEditorMDI
                         case DrawingMode.Pentagon:
                         case DrawingMode.Hexagon:
                             var points = CalculatePolygonPoints(startPoint, endPoint, currentMode == DrawingMode.Pentagon ? 5 : 6);
-                            drawingGraphics.DrawPolygon(pen, points); if (fillShape) drawingGraphics.FillPolygon(brush, points); break;
+                            drawingGraphics.DrawPolygon(pen, points);
+                            if (fillShape) drawingGraphics.FillPolygon(brush, points);
+                            break;
                         case DrawingMode.Paste:
                             if (copiedRegion != null)
                             {
@@ -168,12 +172,29 @@ namespace GraphicalEditorMDI
 
         private void PictureBox_Paint(object sender, PaintEventArgs e)
         {
+            if (isDrawing && !isSelecting)
+            {
+                using (Pen pen = new Pen(penColor, penWidth))
+                using (Brush brush = new SolidBrush(fillColor))
+                {
+                    var r = GetRectangle(startPoint, endPoint);
+                    switch (currentMode)
+                    {
+                        case DrawingMode.Line: e.Graphics.DrawLine(pen, startPoint, endPoint); break;
+                        case DrawingMode.Rectangle: e.Graphics.DrawRectangle(pen, r); if (fillShape) e.Graphics.FillRectangle(brush, r); break;
+                        case DrawingMode.Ellipse: e.Graphics.DrawEllipse(pen, r); if (fillShape) e.Graphics.FillEllipse(brush, r); break;
+                        case DrawingMode.Pentagon:
+                        case DrawingMode.Hexagon:
+                            var points = CalculatePolygonPoints(startPoint, endPoint, currentMode == DrawingMode.Pentagon ? 5 : 6);
+                            e.Graphics.DrawPolygon(pen, points); if (fillShape) e.Graphics.FillPolygon(brush, points); break;
+                    }
+                }
+            }
+
             if (isSelecting || hasSelection)
             {
-                using (Pen borderPen = new Pen(Color.Blue, 1) { DashStyle = System.Drawing.Drawing2D.DashStyle.Dash })
-                {
-                    e.Graphics.DrawRectangle(borderPen, isSelecting ? selectionRect : selectionBorder);
-                }
+                using (Pen pen = new Pen(Color.Blue, 1) { DashStyle = System.Drawing.Drawing2D.DashStyle.Dash })
+                    e.Graphics.DrawRectangle(pen, isSelecting ? selectionRect : selectionBorder);
             }
         }
 
@@ -206,10 +227,7 @@ namespace GraphicalEditorMDI
                 drawingBitmap.Save(currentFileName, format);
                 Text = System.IO.Path.GetFileName(currentFileName) + " - Графический редактор";
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Ошибка при сохранении файла: " + ex.Message);
-            }
+            catch (Exception ex) { MessageBox.Show("Ошибка при сохранении файла: " + ex.Message); }
         }
 
         private void OpenImage()
@@ -224,10 +242,7 @@ namespace GraphicalEditorMDI
                 Text = System.IO.Path.GetFileName(currentFileName) + " - Графический редактор";
                 hasSelection = false;
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Ошибка при открытии файла: " + ex.Message);
-            }
+            catch (Exception ex) { MessageBox.Show("Ошибка при открытии файла: " + ex.Message); }
         }
 
         private void CopySelection()
